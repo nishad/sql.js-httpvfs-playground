@@ -20,7 +20,8 @@
 
   import { CodeJar } from "@novacbn/svelte-codejar";
   let sqlQuery = `SELECT * from titles WHERE title_id LIKE "tt00000%";`;
-  let dbUrl = "/db/imdb-titles-100000_1024_indexed.db";
+  let dbUrl =
+    "https://nishad.github.io/sql.js-httpvfs-playground/db/imdb-titles-100000_1024_indexed.db";
   import Prism from "prismjs";
   import "prismjs/components/prism-sql";
 
