@@ -63,7 +63,7 @@ jobs:
       - name: Install dependencies
         run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
       - name: Static HTML export with Svelte
-        run: ${{ steps.detect-package-manager.outputs.manager }} run build
+        run: ${{ steps.detect-package-manager.outputs.manager }} run build --base=./
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
