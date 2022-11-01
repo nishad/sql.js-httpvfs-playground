@@ -1,8 +1,22 @@
 <script>
-  import { Button } from "flowbite-svelte";
+  import { Button, ButtonGroup } from "flowbite-svelte";
   import { Spinner, Alert } from "flowbite-svelte";
   import { Heading, P, A } from "flowbite-svelte";
   import { Select, Input, Label, Helper } from "flowbite-svelte";
+
+  import { createDbWorker } from "sql.js-httpvfs";
+  import { PowerTable } from "@muonw/powertable";
+  import { Sheet, FileJson2 } from "lucide-svelte";
+
+  import pTime from "p-time";
+  import saveAs from "file-saver";
+  // @ts-ignore
+  import PapaParse from "papaparse";
+  import prettyBytes from "pretty-bytes";
+  import pluralize from "pluralize";
+
+  import { CodeJar } from "@novacbn/svelte-codejar";
+
   let pageSize = "1024";
   let pageSizes = [
     { value: "512", name: "512" },
@@ -13,12 +27,6 @@
     { value: "16384", name: "16384" },
     { value: "32768", name: "32768" },
   ];
-
-  import { createDbWorker } from "sql.js-httpvfs";
-  import { PowerTable } from "@muonw/powertable";
-  import pTime from "p-time";
-
-  import { CodeJar } from "@novacbn/svelte-codejar";
   let sqlQuery = `SELECT * from titles WHERE title_id LIKE "tt00000%";`;
   let dbUrl =
     "https://nishad.github.io/sql.js-httpvfs-playground/db/imdb-titles-100000_1024_indexed.db";
@@ -57,20 +65,51 @@
       wasmUrl.toString()
     );
     const result = await worker.db.query(sqlQuery);
-    return result;
+    const bytesRead = await worker.worker.bytesRead;
+    const stats = await worker.worker.getStats();
+    return { result, bytesRead, stats };
   }
 
   let result;
   let timeTaken;
+  let bytesRead;
+  let querying = false;
+  let error = false;
+  let errorMessage = "";
+  let jsonFile;
+  let totalBytes;
+  let totalRequests;
 
   async function runQuery() {
-    result = pTime(queryDb)();
-    await result;
-    timeTaken = result.time;
+    result = null;
+    querying = true;
+    error = false;
+    let queryData = pTime(queryDb)();
+    await queryData
+      .then((data) => {
+        result = data.result;
+        timeTaken = queryData.time;
+        bytesRead = data.bytesRead;
+        totalRequests = data.stats.totalRequests;
+        totalBytes = data.stats.totalBytes;
+        querying = false;
+        error = false;
+        jsonFile = new Blob([JSON.stringify(result, null, 2)], {
+          type: "application/json",
+        });
+      })
+      .catch((queryError) => {
+        error = true;
+        errorMessage = queryError.message;
+        console.log("Query Error: ", queryError.message);
+        console.log(queryError);
+        querying = false;
+        jsonFile = null;
+      });
   }
 </script>
 
-<main class="pt-8 pb-16 lg:pt-16 lg:pb-24 bg-white">
+<main class="pt-8 pb-12 lg:pt-12 lg:pb-12 bg-white">
   <div class=" px-4 mx-auto max-w-screen-xl">
     <div class="p-8">
       <Heading tag="h2" customeSize="text-4xl font-extrabold "
@@ -102,7 +141,7 @@
       </A>
     </div>
 
-    <div class="p-8">
+    <div class="p-6">
       <Label class="space-y-2">
         <span>SQLite DB file URL</span>
         <Input type="url" placeholder="" size="md" bind:value={dbUrl} />
@@ -112,38 +151,84 @@
         <Select class="mt-2" items={pageSizes} bind:value={pageSize} />
       </Label>
     </div>
-    <div class="p-8">
+    <div class="p-6">
       <Label class="space-y-2">
         <span>Edit SQL Qery</span>
         <CodeJar bind:value={sqlQuery} syntax="sql" {highlight} />
       </Label>
     </div>
-    <div class="p-8">
-      <Button on:click={runQuery}>Query Database</Button>
-    </div>
-    {#await result}
-      <div class="p-8">
-        <Spinner />
-        <p>Querying</p>
-      </div>
-    {:then data}
-      {#if data}
-        {#if timeTaken}
-          <div class="p-8 mt-2">
-            <Alert>
-              Query took <span class="font-medium">{timeTaken}</span> ms
-            </Alert>
-          </div>
+    <div class="p-6">
+      <Button on:click={runQuery}>
+        {#if querying}
+          <Spinner class="mr-3" size="4" color="white" /> Querying ...
+        {:else}
+          Run Query
         {/if}
-        <div class="p-8">
-          <div class="MuonW PowerTable">
-            <PowerTable ptData={data} {ptOptions} />
-          </div>
+      </Button>
+    </div>
+
+    {#if result}
+      {#if timeTaken}
+        <div class="p-6 mt-2">
+          <Alert>
+            Query took <span class="font-medium">{timeTaken}</span> ms to read
+            <span class="font-medium">{prettyBytes(bytesRead)}</span>
+            with
+            <span class="font-medium">{totalRequests}</span> requests from the
+            database of
+            <span class="font-medium">{prettyBytes(totalBytes)}</span>, and
+            returned
+            <span class="font-medium">
+              {pluralize("row", result.length, true)}</span
+            >
+            equivalent to
+            <span class="font-medium">{prettyBytes(jsonFile.size)}</span> of JSON.
+          </Alert>
         </div>
       {/if}
-    {:catch error}
-      <p style="color: red">{error.message}</p>
-    {/await}
+      <div class="p-6">
+        <div class="MuonW PowerTable">
+          <PowerTable ptData={result} {ptOptions} />
+        </div>
+      </div>
+
+      <div class="p-4">
+        <ButtonGroup>
+          <Button
+            color="light"
+            size="xs"
+            on:click={() => {
+              const blob = jsonFile;
+              saveAs(blob, "result.json");
+            }}
+          >
+            <FileJson2 />
+            Download as JSON
+          </Button>
+          <Button
+            color="light"
+            size="xs"
+            on:click={() => {
+              const blob = new Blob([PapaParse.unparse(result)], {
+                type: "text/csv",
+              });
+              saveAs(blob, "result.csv");
+            }}
+          >
+            <Sheet />
+            Download as CSV
+          </Button>
+        </ButtonGroup>
+      </div>
+    {/if}
+    {#if error}
+      <div class="p-6 mt-2">
+        <Alert color="red">
+          <span class="font-medium">Error:</span>
+          {errorMessage}
+        </Alert>
+      </div>
+    {/if}
   </div>
 </main>
 
