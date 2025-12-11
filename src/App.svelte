@@ -106,6 +106,13 @@
    */
   const DEFAULT_DB_URL = "https://nishad.github.io/sql.js-httpvfs-playground/db/imdb-titles-100000_1024_indexed.sqlite3";
 
+  /**
+   * Default database file size in bytes.
+   * Required for GitHub Pages which doesn't return Content-Length on HEAD requests with gzip vary.
+   * @constant {number}
+   */
+  const DEFAULT_DB_SIZE = 10261504;
+
   // ============================================================================
   // State
   // ============================================================================
@@ -118,6 +125,9 @@
 
   /** @type {string} URL of the SQLite database file */
   let dbUrl = $state(DEFAULT_DB_URL);
+
+  /** @type {string} Optional file size for databases where server doesn't report Content-Length */
+  let dbFileSize = $state(String(DEFAULT_DB_SIZE));
 
   /** @type {Array<Object>|null} Query result rows */
   let result = $state(null);
@@ -203,15 +213,23 @@
    * @throws {Error} If the database connection or query fails
    */
   async function queryDb() {
+    const config = {
+      serverMode: "full",
+      url: dbUrl,
+      requestChunkSize: Number(pageSize),
+    };
+
+    // Add file size if specified (required for servers that don't return Content-Length)
+    const fileSizeNum = Number(dbFileSize);
+    if (fileSizeNum > 0) {
+      config.fileSize = fileSizeNum;
+    }
+
     const worker = await createDbWorker(
       [
         {
           from: "inline",
-          config: {
-            serverMode: "full",
-            url: dbUrl,
-            requestChunkSize: Number(pageSize),
-          },
+          config,
         },
       ],
       workerUrl.toString(),
@@ -338,10 +356,22 @@
           bind:value={dbUrl}
         />
       </Label>
-      <Label class="space-y-2 mt-4">
-        <span class="text-gray-900 dark:text-white font-medium">Request Chunk Size</span>
-        <Select class="mt-2" items={PAGE_SIZE_OPTIONS} bind:value={pageSize} />
-      </Label>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <Label class="space-y-2">
+          <span class="text-gray-900 dark:text-white font-medium">File Size (bytes)</span>
+          <Input
+            type="number"
+            placeholder="Required if server doesn't report size"
+            size="md"
+            bind:value={dbFileSize}
+          />
+          <span class="text-xs text-gray-500 dark:text-gray-400">Required for GitHub Pages and some CDNs</span>
+        </Label>
+        <Label class="space-y-2">
+          <span class="text-gray-900 dark:text-white font-medium">Request Chunk Size</span>
+          <Select class="mt-2" items={PAGE_SIZE_OPTIONS} bind:value={pageSize} />
+        </Label>
+      </div>
     </section>
 
     <!-- Query Editor Section -->
