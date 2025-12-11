@@ -127,9 +127,6 @@
   /** @type {string} URL of the SQLite database file */
   let dbUrl = $state(DEFAULT_DB_URL);
 
-  /** @type {string} Optional file size for databases where server doesn't report Content-Length */
-  let dbFileSize = $state(String(DEFAULT_DB_SIZE));
-
   /** @type {Array<Object>|null} Query result rows */
   let result = $state(null);
 
@@ -214,24 +211,25 @@
    * @throws {Error} If the database connection or query fails
    */
   async function queryDb() {
-    const fileSizeNum = Number(dbFileSize);
+    const isDefaultDb = dbUrl === DEFAULT_DB_URL;
 
     let config;
 
-    if (fileSizeNum > 0) {
-      // When file size is known, use chunked mode with the entire file as a single chunk
-      // This bypasses the Content-Length detection issues with GitHub Pages
-      // The file should exist at urlPrefix + "0" (e.g., database.sqlite30)
+    if (isDefaultDb) {
+      // For the default database on GitHub Pages, use chunked mode workaround
+      // The file exists at urlPrefix + "0" (e.g., .sqlite30)
+      // This bypasses GitHub Pages' Content-Length detection issues
       config = {
         serverMode: "chunked",
         urlPrefix: dbUrl,
         requestChunkSize: Number(pageSize),
-        databaseLengthBytes: fileSizeNum,
-        serverChunkSize: fileSizeNum,
+        databaseLengthBytes: DEFAULT_DB_SIZE,
+        serverChunkSize: DEFAULT_DB_SIZE,
         suffixLength: 1,
       };
     } else {
-      // Fallback to full mode when file size is not provided
+      // For custom URLs, use standard full mode
+      // The server must properly support HTTP Range requests and return Content-Length
       config = {
         serverMode: "full",
         url: dbUrl,
@@ -369,23 +367,14 @@
           size="md"
           bind:value={dbUrl}
         />
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+          Server must support HTTP Range requests and return Content-Length header
+        </span>
       </Label>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-        <Label class="space-y-2">
-          <span class="text-gray-900 dark:text-white font-medium">File Size (bytes)</span>
-          <Input
-            type="number"
-            placeholder="Required if server doesn't report size"
-            size="md"
-            bind:value={dbFileSize}
-          />
-          <span class="text-xs text-gray-500 dark:text-gray-400">Required for GitHub Pages and some CDNs</span>
-        </Label>
-        <Label class="space-y-2">
-          <span class="text-gray-900 dark:text-white font-medium">Request Chunk Size</span>
-          <Select class="mt-2" items={PAGE_SIZE_OPTIONS} bind:value={pageSize} />
-        </Label>
-      </div>
+      <Label class="space-y-2 mt-4">
+        <span class="text-gray-900 dark:text-white font-medium">Request Chunk Size</span>
+        <Select class="mt-2" items={PAGE_SIZE_OPTIONS} bind:value={pageSize} />
+      </Label>
     </section>
 
     <!-- Query Editor Section -->
