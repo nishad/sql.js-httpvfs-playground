@@ -213,17 +213,25 @@
    * @throws {Error} If the database connection or query fails
    */
   async function queryDb() {
-    const config = {
-      serverMode: "full",
-      url: dbUrl,
-      requestChunkSize: Number(pageSize),
-    };
-
-    // Add file size if specified (required for servers that don't return Content-Length)
     const fileSizeNum = Number(dbFileSize);
-    if (fileSizeNum > 0) {
-      config.fileSize = fileSizeNum;
-    }
+
+    // Build config based on whether file size is provided
+    // When file size is specified, use "chunked" mode which allows setting databaseLengthBytes
+    // This is required for servers like GitHub Pages that don't return Content-Length properly
+    const config = fileSizeNum > 0
+      ? {
+          serverMode: "chunked",
+          urlPrefix: dbUrl,
+          requestChunkSize: Number(pageSize),
+          databaseLengthBytes: fileSizeNum,
+          serverChunkSize: fileSizeNum, // Single chunk = entire file
+          suffixLength: 0,
+        }
+      : {
+          serverMode: "full",
+          url: dbUrl,
+          requestChunkSize: Number(pageSize),
+        };
 
     const worker = await createDbWorker(
       [
