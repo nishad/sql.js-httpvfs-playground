@@ -101,7 +101,8 @@
   const DEFAULT_SQL_QUERY = `SELECT * FROM titles WHERE title_id LIKE "tt00000%";`;
 
   /**
-   * Default database URL (relative to current origin).
+   * Default database URL prefix for chunked mode.
+   * The actual file is at this URL + "0" (e.g., ...sqlite30)
    * @constant {string}
    */
   const DEFAULT_DB_URL = "https://nishad.github.io/sql.js-httpvfs-playground/db/imdb-titles-100000_1024_indexed.sqlite3";
@@ -215,23 +216,28 @@
   async function queryDb() {
     const fileSizeNum = Number(dbFileSize);
 
-    // Build config based on whether file size is provided
-    // When file size is specified, use "chunked" mode which allows setting databaseLengthBytes
-    // This is required for servers like GitHub Pages that don't return Content-Length properly
-    const config = fileSizeNum > 0
-      ? {
-          serverMode: "chunked",
-          urlPrefix: dbUrl,
-          requestChunkSize: Number(pageSize),
-          databaseLengthBytes: fileSizeNum,
-          serverChunkSize: fileSizeNum, // Single chunk = entire file
-          suffixLength: 0,
-        }
-      : {
-          serverMode: "full",
-          url: dbUrl,
-          requestChunkSize: Number(pageSize),
-        };
+    let config;
+
+    if (fileSizeNum > 0) {
+      // When file size is known, use chunked mode with the entire file as a single chunk
+      // This bypasses the Content-Length detection issues with GitHub Pages
+      // The file should exist at urlPrefix + "0" (e.g., database.sqlite30)
+      config = {
+        serverMode: "chunked",
+        urlPrefix: dbUrl,
+        requestChunkSize: Number(pageSize),
+        databaseLengthBytes: fileSizeNum,
+        serverChunkSize: fileSizeNum,
+        suffixLength: 1,
+      };
+    } else {
+      // Fallback to full mode when file size is not provided
+      config = {
+        serverMode: "full",
+        url: dbUrl,
+        requestChunkSize: Number(pageSize),
+      };
+    }
 
     const worker = await createDbWorker(
       [
