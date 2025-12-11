@@ -1,8 +1,16 @@
-/* Write your global styles here, in PostCSS syntax */
-@tailwind base;
-/* Write your global styles here, in PostCSS syntax */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-@tailwind components;
-@tailwind utilities;
+/**
+ * Global styles for the application.
+ * Uses Tailwind CSS v4 with flowbite plugin.
+ */
+
+/* Import Tailwind CSS */
+@import "tailwindcss";
+
+/* Enable Flowbite plugin for component styles */
+@plugin "flowbite/plugin";
+
+/* Define dark mode variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Include Flowbite Svelte component styles */
+@source "../node_modules/flowbite-svelte/dist";
